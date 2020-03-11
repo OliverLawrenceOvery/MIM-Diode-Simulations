@@ -1,0 +1,308 @@
+clear all;
+clc;
+
+% Quantum tunneling probabaility
+q=1.6e-19; % energy conversion (J/eV)
+c=3e8;% speed of light (m/s)
+hbar=1.055e-34 ; % Planck's constant/2pi (Js)
+me=0.511*1e6*q/c^2; % mass of the electron (Kg)
+Constant=2*me/hbar^2; % convenient constant definition
+m=9.11e-31; % convenient constant definition
+Conv=q;
+%
+% MIM geometry
+L=2e-9; % junction thickness (m)
+d_x=100e-9; % Nanoslab thickness
+d_y=d_x; % nanowire thickness
+%
+% data for wave function calculations
+Np=50; % number of discretization points in each segment 
+
+z1=linspace(-L/2,-L/Np,Np);
+z3=linspace(L+L/2/Np,3*L/2,Np);
+z2=linspace(0,L,Np); 
+z=[z1,z2,z3];
+Vd = [-0.3:0.05:0.3]; % applied voltage (eV)
+
+for mm = 1:1:length(Vd)
+    Ntot=length(z); % number of points along the z-axis
+    Vin=0*Vd(mm)*Conv; % Potential at input
+    Vout=-Vd(mm)*Conv;%11.*Conv; % Potential at output
+    V0=(11.65)*Conv;%11.74*Conv;
+    V1=(10.08-Vd(mm))*Conv;%12.36*Conv; % Right-side Barrier  
+    DV=(V1-V0)/L; % Film potential gradient (eV/m)
+    VV1=Vin*ones(1,Np);
+    VV2=V0+DV*z2; % Potential profile in z
+    VV3=Vout*ones(1,Np);
+    V=[VV1,VV2,VV3];
+    % figure(1); % plot of the potential
+    % plot(z,V./Conv);
+    % xlabel('z (nm)');
+    % ylabel('V(z) (eV)');
+    Ne=200; % number of energy points
+    
+    E=[9:(12-9)/Ne:12]*q;
+    dE=E(2)-E(1); % energy differential
+    k=zeros(1,Ntot);
+    Ex1=zeros(1,Ntot);
+    Ex2=zeros(1,Ntot);
+    
+    for jj=1:Ne+1
+        Vect=[1,0]';
+        A=zeros(1,Ntot);
+        B=zeros(1,Ntot);
+        A(Ntot)=Vect(1);
+        B(Ntot)=Vect(2);
+        k(Ntot)=sqrt((E(jj)-V(Ntot)).*Constant);
+        Dz=z(Ntot)-z(Ntot-1);
+        Ex1(Ntot)=1;%exp(1i*k(Ntot)*Dz);
+        Ex2(Ntot)=1;%exp(-1i*k(Ntot)*Dz);
+        M0=[1,1; k(Ntot),-k(Ntot)];
+        for ii=Ntot-1:-1:1
+            k(ii)=sqrt((E(jj)-V(ii)).*Constant);
+            Dz=(z(ii+1)-z(ii));
+            Ex11=exp(1i*k(ii)*Dz);
+            Ex21=exp(-1i*k(ii)*Dz);
+            % M=[Ex11,Ex21; k(ii)*Ex11,-k(ii)*Ex21];
+            % Minv=[.5*Ex21,.5*Ex21/k(ii); 0.5*Ex11,
+            Sk=k(ii)+k(ii+1);
+            Dk=k(ii+1)-k(ii);
+            M11=0.5*Sk/k(ii)*Ex21;
+            M22=0.5*Sk/k(ii)*Ex11;
+            M12=-0.5*Dk/k(ii)*Ex21;
+            M21=-0.5*Dk/k(ii)*Ex11;
+            MM=[M11,M12;M21,M22];
+            Vect=MM*Vect;
+            Ex1(ii)=Ex11;
+            Ex2(ii)=Ex21;       
+            A(ii)=Vect(1);
+            B(ii)=Vect(2);
+        end
+        B=B/A(1); % normalization
+        A=A/A(1); % normalization    
+        prob_TMM(mm,jj)=abs(k(Ntot)/k(1))*abs(A(Ntot)).^2;
+        for i=1:1:length(prob_TMM(mm,:))
+            if isnan(prob_TMM(mm,1))
+                prob_TMM(1) = 0;
+            elseif isnan(prob_TMM(mm,i))
+                prob_TMM(mm,i)=(prob_TMM(mm,i-1));
+            end
+        end
+        %         for jj=1:Ne+1
+        %             ei=3; e0=8.85*10^-12;
+        %             div=L/n;%each small division the barrier is divided into
+        %             k1=(sqrt(2*m*E(jj)))/hbar;
+        %             k2=(sqrt(2*m*(E(jj)-V(mm))))/hbar;
+        %             T=[1 0;0 1];
+        %             for i=0:1:n  %For each energy, iterate across all individual n barriers
+        %                 d=i*div;   %Position relative to start i.e. number of barriers across we are
+        %                 T=T*[exp(1i*k1*d) 0;0 exp(-1i*k1*d)]*0.5*[1+k1/k2 1-k1/k2;1-k1/k2 1+k1/k2]*[exp(-1i*k2*d) 0;0 exp(1i*k2*d)];
+        %                 k1=k2;
+        %                 k2=(sqrt(2*m*(E(jj)-(V0+DV*(d+div)-((q.^2)./(16*pi*ei*e0*(d+div)))))))/hbar;  %Includes image force
+        %             end
+        %             k2=sqrt(2*m*E(jj))/hbar;
+        %             d=L;  %At the end of the barrier length
+        %             T=T*[exp(1i*k1*d) 0;0 exp(-1i*k1*d)]*0.5*[k1/k2+1 1-k1/k2;1-k1/k2 1+k1/k2]*[exp(-1i*k2*d) 0;0 exp(1i*k2*d)];
+        %             prob_TMM(mm,jj)=(abs(1/T(4)))^2;
+      end
+        
+    %Airy TMM
+    U=[[V0:(V1-V0)/(Ntot):V1]];
+    NE=length(E);  % Number of energy values used
+    for jj=1:NE  %Iterate through all energies
+        kL=(sqrt(2*m*(E(jj)+V0)))/hbar;
+        kR=(sqrt(2*m*(E(jj)+V1-V(mm))))/hbar;
+        x=[0:L/(Ntot):L];
+        T=[1 0;0 1];
+        for j=1:1:Ntot  %For each energy, iterate across all individual n barriers
+            F(j) = (U(j+1)-U(j))/(x(j+1)-x(j));
+            F_abs(j)=abs(F(j));
+            sg(j)=sign(F(j));
+            u(j) = sg(j)*(2*m*F_abs(j)/(hbar^2))^(1/3);
+            zminus(j) = u(j)*((U(j)-E(jj))/F(j));
+            zplus(j) = u(j)*((U(j)-E(jj))/F(j) + (x(j+1)-x(j)) );
+            M=[airy(0,zminus(j)) airy(2,zminus(j)); (u(j)/m)*airy(1,zminus(j)) (u(j)/m)*airy(3,zminus(j))];
+            N=[airy(3,zplus(j)) -m*airy(2,zplus(j))/u(j); -airy(1,zplus(j)) m*airy(0,zplus(j))/u(j)];
+            T=T*M*N;
+        end
+        ML=[1 m/(1i*kL) ;1 m/(1i*kL)];
+        MR=[1 1 ;1i*kR/m -1i*kR/m];
+        T=0.5*(pi^Ntot)*ML*T*MR;
+        prob_airyTMM(mm,jj)=(kR/kL)*(1/abs(T(1))^2);
+    end
+    
+    
+    N = Ntot; % # of cells
+    
+    energy_coeff = ones(N,1);
+    t_coeff = ones(N-1,1);
+    thickness = L;
+    
+    % metal m*   Ef(eV)  phim(eV)
+    % Pt    2.5  8.5     5.36
+    % Ti         4.35?   4.10
+
+    Ef1 = 8.5; % metal 1 Fermi energi in eV (Pt)
+    m1 = 2.5; % effective mass in metal 1 (Pt)
+    Dphi1 = 11.65;%1.5; % metal 1 barrier in eV
+    
+    Ef2 = 4.35; % metal 2 Fermi energi in eV
+    m2 = 1; % effective mass in metal 1
+    Dphi2 = 10.08;%0.08;   % metal 2 barrier in eV
+    
+    temperature = 297; % in K
+    
+    E_min = E(1)/q;
+    E_max = E(length(E))/q;
+    delta_E = (E_max-E_min)/Ne; % shoul be << kT if there are resonant states. kT/5 seems to work
+    
+    a = zeros(N-1,1);
+    a = a+thickness/(N-1);
+    
+    %%%%%%%%%%%%%%%% constants %%%%%%%%%%%%%%%%%
+    
+    hb = 1.05e-34; %Js
+    kB = 8.617e-5; %in eV/K
+    kT = kB*temperature;
+    m0 = 9.1e-31; % electron mass in Kg
+
+    t=((hb^2./(2*m0*a.^2))/q).*t_coeff; %in eV
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % current operator Jop
+    Jop = zeros(N,N);
+    Jop = diag(-1i*t,+1)+diag(1i*t,-1);
+    Jop = Jop*q/(hb*N);
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % preallocation for speed
+    
+    E = E_min:delta_E:E_max; %in eV
+    % self energy
+    sigma1 = zeros(N,N);
+    sigma2 = zeros(N,N);
+    % green function
+    G = zeros(N,N);
+    % spectral functions
+    A1 = zeros(N,N);
+    A2 = zeros(N,N);
+  
+    clear U
+    U = linspace(Dphi1,Dphi2-Vd(mm),N)'; % energy in eV, 0 is Ef at metal 1
+    
+    % self energy
+    sigma1 = zeros(N,N);
+    sigma2 = zeros(N,N);
+    % green function
+    G = zeros(N,N);
+    % spectral functions
+    A1 = zeros(N,N);
+    A2 = zeros(N,N);
+    % DOS
+    DOS = zeros(N,max(size(E)));
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % longitudinal hamiltonian HL
+    HL = zeros(N);
+    HL_diag = zeros(N,1);
+    HL_diag(1) = t(1)*(m1+1)/m1;
+    HL_diag(N) = t(N-1)*(m2+1)/m2;
+    HL_diag(2:(N-1)) = t(2:(N-1))+t(1:(N-2));
+    HL_diag = HL_diag.*energy_coeff + U;
+    HL = diag(HL_diag,0)+diag(-t,-1)+diag(-t,1);
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % start energy loop
+    for ii=1:max(size(E))
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % self energy NB: E = -Ef1 + 2*t*(1 - cos(k1*a))
+        k1 = (acos(1-(E(ii)+Ef1)/(2*(t(1)/m1))))/a;
+        sigma1(1,1) = -(t(1)/m1)*exp(1i*k1*a);
+        
+        k2 = (acos(1-(E(ii)+Ef2)/(2*(t(N-1)/m2))))/a;
+        sigma2(N,N) = -(t(N-1)/m2)*exp(1i*k2*a);
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % retarded green function G(E)
+        G = inv(E(ii)*eye(N)-HL-sigma1-sigma2);
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % spectral functions A1(E) A2(E)
+        A1 = 1i*G*(sigma1-sigma1')*G';
+        A2 = 1i*G*(sigma2-sigma2')*G';
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % transmission prob T(E) at different V
+        prob_NEGF(mm,ii) = abs(trace(1i*(sigma1-sigma1')*A2));
+    end %energy loop
+
+    
+    U=[0;[V0:(V1-V0)/(Ntot):V1]';0]/q;
+    NumPoints=length(U);
+    div=(L/1e-9)/NumPoints; % Width of each segment (assuming each same width)   
+    for i = 1:NE %Calculate gamma and Z0 in each region, for each energy
+        gamma(:,i) = 1i*(1e-9)*(sqrt(2*q*m.*(E(i) - U)/hbar^2)); % nm-1
+        Zo(:,i) = gamma(:,i)*hbar./(1i*m);
+    end  
+    ZL = Zo(NumPoints,:); % Let Zl equal the rightmost Zo
+    for num = NumPoints-1:-1:2  % From right segment to left segment
+        ZL=Zo(num,:).*((ZL-Zo(num,:).*tanh(gamma(num,:)*div))./(Zo(num,:)-ZL.*tanh(gamma(num,:)*div)));
+    end % Calculate load impedance at second rightmost point
+    rho=(ZL-Zo(1,:))./(ZL+Zo(1,:));
+    prob_TLM(mm,:) = 1-(abs(rho)).^2;
+    for i=1:1:length(prob_TLM(mm,:))
+        if isnan(prob_TLM(mm,1))
+            prob_TLM(1) = 0;
+        elseif isnan(prob_TLM(mm,i))
+        prob_TLM(mm,i)=(prob_TLM(mm,i-1));
+        end
+    end
+    
+end
+    
+ 
+E=E*q;
+h = 6.626*10^(-34); % Planck's constant (Js)
+KT = 0.026*Conv;
+Ef = 10.*Conv; % Fermi energy
+for nnn=1:1:length(Vd)
+    for nn = 1:1:length(E)
+        Ex = linspace(E(nn),12*Conv,1500);
+        dEx=(max(Ex)-E(nn))/length(Ex);
+        f1 = 1./(exp((Ex-Ef)./KT)+1);
+        f2 = 1./(exp((Ex-Ef+Vd(nnn).*Conv)./KT)+1);
+        f3 = (f1-f2);
+        Inte1(nn) = sum(f3)*dEx;
+        Inte2_TMM(nnn,nn) = Inte1(nn)*prob_TMM(nnn,nn)*dE;
+        Inte2_airyTMM(nnn,nn) = Inte1(nn)*prob_airyTMM(nnn,nn)*dE;
+        Inte2_TLM(nnn,nn) = Inte1(nn)*prob_TLM(nnn,nn)*dE;
+        Inte2_NEGF(nnn,nn) = Inte1(nn)*prob_NEGF(nnn,nn)*dE;
+    end
+    J3D_TMM(nnn) =(4*pi*m*q/(h^3))*sum(Inte2_TMM(nnn,:));
+    J3D_airyTMM(nnn) =(4*pi*m*q/(h^3))*sum(Inte2_airyTMM(nnn,:));
+    J3D_TLM(nnn) =(4*pi*m*q/(h^3))*sum(Inte2_TLM(nnn,:));
+    J3D_NEGF(nnn) =(4*pi*m*q/(h^3))*sum(Inte2_NEGF(nnn,:));
+end
+    
+
+area=10e-6*10e-6; 
+plot(Vd,(J3D_TLM)*area*1e6,"LineStyle", ':');
+hold on;
+plot(Vd,(J3D_NEGF)*area*1e6,"LineStyle", '--', "Color", 'g');
+hold on;
+plot(Vd,(J3D_TMM)*area*1e6,"LineStyle", '-', "Color", 'r');
+hold on;
+plot(Vd,(J3D_airyTMM)*area*1e6,"LineStyle", '-', "Color", 'b');
+grid;
+xlabel('$V_{D}$ [V]','Interpreter', 'latex');
+ylabel('$J$ [$\mu$A]','Interpreter', 'latex');
+%legend("1D", "2D", "3D");
+legend("TLM","NEGF","TMM","AiryTMM", 'Interpreter' , 'latex');
+set(gcf,'color','w');
+set(gca,'XMinorTick','on','YMinorTick','on')
+
+
+    
+    
+    

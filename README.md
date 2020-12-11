@@ -14,7 +14,7 @@ Various simulation methods for simulating the current-voltage characteristics of
 
 
 
-1. [Project Goal](#Project_Goal)
+1. [Project Goal](#Project-Goal)
 
 2. [Users Guide](#Users_Guide)
 
